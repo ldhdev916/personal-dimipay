@@ -24,7 +24,7 @@ export function DimipayQRCode({value, expiresAtJson}: { value: string, expiresAt
     }, [expiresAt, router]);
 
     useEffect(() => {
-        watchTransaction("")
+        watchTransaction()
     }, [watchTransaction]);
 
     switch (result.data) {

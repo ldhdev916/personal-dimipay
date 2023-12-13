@@ -17,8 +17,6 @@ const authAction = createSafeActionClient({
     }
 })
 
-const watchTransactionSchema = z.any().optional()
-
-export const actionWatchTransaction = authAction(watchTransactionSchema, async () => {
+export const actionWatchTransaction = authAction(z.void(), async () => {
     return await dimipayService().watchTransaction()
 })
