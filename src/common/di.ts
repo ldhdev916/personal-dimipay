@@ -12,13 +12,6 @@ container.register(DimipayService, {
 
 export const dimipayService = () => container.resolve(DimipayService)
 
-export const dimipayProvider = () => {
-    const resolved = container.resolve<DimipayProvider>(RestDimipayProvider)
-
-    console.log(resolved)
-
-    return resolved
-
-}
+export const dimipayProvider = () => container.resolve<DimipayProvider>(RestDimipayProvider)
 
 export const dimipayTransactionRepository = () => container.resolve<DimipayTransactionRepository>(PrismaDimipayTransactionRepository)

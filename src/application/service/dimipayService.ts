@@ -14,6 +14,7 @@ export class DimipayService {
         const transaction = await this.provider.watchTransaction()
 
         if (transaction) {
+            console.log("Saving transaction", transaction)
             await this.repository.save(transaction)
         }
 
