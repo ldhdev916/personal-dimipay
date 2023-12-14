@@ -75,10 +75,6 @@ export class RestDimipayProvider implements DimipayProvider {
             heartbeatTimeout: 1000 * 60 * 6
         })
 
-        eventSource.onopen = (event) => {
-            console.log("OPEN at", dayjs(), event)
-        }
-
         eventSource.onerror = async (event) => {
             console.log("ERROR at", dayjs(), event)
 
@@ -91,17 +87,22 @@ export class RestDimipayProvider implements DimipayProvider {
             }
         }
 
-        eventSource.onmessage = ({data}) => {
-            console.log("DATA", data, typeof data)
+        console.log("Result", await Promise.race([
+            new Promise<boolean>(resolve => {
+                eventSource.onmessage = ({data}) => {
+                    try {
+                        const {status}: { status?: string } = JSON.parse(data)
 
-            if (typeof data == "string") {
-                const {status}: { status?: string } = JSON.parse(data)
+                        if (status == "CONFIRMED") {
+                            resolve(true)
+                        }
+                    } catch (e) {
 
-                console.log("Received status", status)
-            }
-        }
-
-        await new Promise(resolve => setTimeout(resolve, 20000))
+                    }
+                }
+            }),
+            new Promise<boolean>(resolve => setTimeout(() => resolve(false), 1000 * 60 * 2))
+        ]))
 
         return
     }
