@@ -4,6 +4,12 @@ import dayjs, {Dayjs} from "dayjs";
 import {DimipayTransaction} from "@/domain/dimipayTransaction";
 import {EventSourcePolyfill} from "event-source-polyfill";
 
+interface RestDimipayTransaction {
+    totalPrice: number
+    createdAt: string
+    products: { name: string }[]
+}
+
 @singleton()
 export class RestDimipayProvider implements DimipayProvider {
 
@@ -75,36 +81,54 @@ export class RestDimipayProvider implements DimipayProvider {
             heartbeatTimeout: 1000 * 60 * 6
         })
 
-        eventSource.onerror = async (event) => {
-            console.log("ERROR at", dayjs(), event)
+        const result = await Promise.race([
+            new Promise<DimipayTransaction>(resolve => {
 
-            if ("status" in event && event.status == 401) {
-                console.log("Unauthorized refreshing token in EventSource")
+                eventSource.onerror = async (event) => {
+                    console.log("ERROR at", dayjs(), event)
 
-                await this.doRefreshToken()
+                    if ("status" in event && event.status == 401) {
+                        console.log("Unauthorized refreshing token in EventSource")
 
-                this.watchTransaction().then()
-            }
-        }
+                        await this.doRefreshToken()
 
-        console.log("Result", await Promise.race([
-            new Promise<boolean>(resolve => {
+                        this.watchTransaction()
+                    }
+                }
+
                 eventSource.onmessage = ({data}) => {
                     try {
                         const {status}: { status?: string } = JSON.parse(data)
 
                         if (status == "CONFIRMED") {
-                            resolve(true)
+                            resolve(this.getLatestTransaction())
                         }
                     } catch (e) {
 
                     }
                 }
             }),
-            new Promise<boolean>(resolve => setTimeout(() => resolve(false), 1000 * 60 * 2))
-        ]))
+            new Promise<undefined>(resolve => setTimeout(resolve, 1000 * 60 * 2))
+        ])
+
+        console.log("Result", result)
 
         return
     }
 
+    private async getLatestTransaction(): Promise<DimipayTransaction> {
+        const response = await fetch(`${this.baseUrl}/transaction/my`, {
+            headers: {
+                Authorization: `Bearer ${this.accessToken}`
+            }
+        })
+
+        const [transaction]: RestDimipayTransaction[] = await response.json()
+
+        return {
+            at: dayjs(transaction.createdAt),
+            price: transaction.totalPrice,
+            products: transaction.products.map(({name}) => name)
+        }
+    }
 }
