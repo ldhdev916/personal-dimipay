@@ -19,6 +19,8 @@ export class RestDimipayProvider implements DimipayProvider {
     private readonly id = process.env.DIMIPAY_PAYMENT_ID!
     private readonly pin = process.env.DIMIPAY_PIN!
 
+    private readonly cancelers = new Set<() => void>()
+
     private accessToken: string | undefined
 
     private async doRefreshToken() {
@@ -74,6 +76,13 @@ export class RestDimipayProvider implements DimipayProvider {
             await this.doRefreshToken()
         }
 
+        if (this.cancelers.size > 0) {
+            console.log(`Canceled ${this.cancelers.size} previous watchers`)
+        }
+
+        this.cancelers.forEach(canceler => canceler())
+        this.cancelers.clear()
+
         const eventSource = new EventSourcePolyfill(`${this.baseUrl}/payment/response`, {
             headers: {
                 Authorization: `Bearer ${this.accessToken}`
@@ -81,18 +90,15 @@ export class RestDimipayProvider implements DimipayProvider {
             heartbeatTimeout: 1000 * 60 * 6
         })
 
-        const result = await Promise.race([
-            new Promise<DimipayTransaction>(resolve => {
-
+        return await Promise.race([
+            new Promise<DimipayTransaction | undefined>(resolve => {
                 eventSource.onerror = async (event) => {
-                    console.log("ERROR at", dayjs(), event)
-
                     if ("status" in event && event.status == 401) {
                         console.log("Unauthorized refreshing token in EventSource")
 
                         await this.doRefreshToken()
 
-                        this.watchTransaction()
+                        this.watchTransaction().then(resolve)
                     }
                 }
 
@@ -108,12 +114,14 @@ export class RestDimipayProvider implements DimipayProvider {
                     }
                 }
             }),
-            new Promise<undefined>(resolve => setTimeout(resolve, 1000 * 60 * 2))
+            new Promise<undefined>(resolve => setTimeout(resolve, 1000 * 60 * 2)),
+            new Promise<undefined>(resolve => {
+                this.cancelers.add(() => {
+                    console.log("Canceled watcher")
+                    resolve(undefined)
+                })
+            })
         ])
-
-        console.log("Result", result)
-
-        return
     }
 
     private async getLatestTransaction(): Promise<DimipayTransaction> {
