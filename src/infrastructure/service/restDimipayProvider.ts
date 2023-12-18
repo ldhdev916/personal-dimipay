@@ -70,18 +70,20 @@ export class RestDimipayProvider implements DimipayProvider {
         return (await this.execute(this.accessToken!))!
     }
 
-    async watchTransaction(): Promise<DimipayTransaction | undefined> {
+    watchTransaction(): Promise<DimipayTransaction | undefined> {
+        return this._watchTransaction()
+    }
+
+    async _watchTransaction(cancel: boolean = true): Promise<DimipayTransaction | undefined> {
 
         if (!this.accessToken) {
             await this.doRefreshToken()
         }
 
-        if (this.cancelers.size > 0) {
-            console.log(`Canceled ${this.cancelers.size} previous watchers`)
+        if (cancel) {
+            this.cancelers.forEach(canceler => canceler())
+            this.cancelers.clear()
         }
-
-        this.cancelers.forEach(canceler => canceler())
-        this.cancelers.clear()
 
         const eventSource = new EventSourcePolyfill(`${this.baseUrl}/payment/response`, {
             headers: {
@@ -98,7 +100,7 @@ export class RestDimipayProvider implements DimipayProvider {
 
                         await this.doRefreshToken()
 
-                        this.watchTransaction().then(resolve)
+                        this._watchTransaction(false).then(resolve)
                     }
                 }
 
@@ -116,10 +118,7 @@ export class RestDimipayProvider implements DimipayProvider {
             }),
             new Promise<undefined>(resolve => setTimeout(resolve, 1000 * 60 * 2)),
             new Promise<undefined>(resolve => {
-                this.cancelers.add(() => {
-                    console.log("Canceled watcher")
-                    resolve(undefined)
-                })
+                this.cancelers.add(() => resolve(undefined))
             })
         ])
     }
@@ -134,7 +133,7 @@ export class RestDimipayProvider implements DimipayProvider {
         const [transaction]: RestDimipayTransaction[] = await response.json()
 
         return {
-            at: dayjs(transaction.createdAt),
+            at: dayjs(transaction.createdAt).subtract(9, "hour"),
             price: transaction.totalPrice,
             products: transaction.products.map(({name}) => name)
         }
